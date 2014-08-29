@@ -6,8 +6,15 @@ import sys
 import getopt
 import string
 
+from common import *
+from room import Room
 from person import Person
 from logfile import LogFile
+
+PersonAction = enum(
+  Arrive = 1, # -A
+  Depart = 2, # -L
+)
 
 def usage(cmd, error=None):
   if error is not None:
@@ -17,20 +24,6 @@ def usage(cmd, error=None):
   %s -T <timestamp> -K <token> (-E <employee-name> | -G <guest-name>) (-A | -L) [-R <room-id>] <log>
   %s -B <file>
   """ % (cmd, cmd))
-
-def verifyStr(toCheck, against):
-  if set(toCheck) - set(against):
-    return False
-  else:
-    return True
-
-def enum(**enums):
-  return type('Enum', (), enums)
-
-PersonAction = enum(
-  Arrive = 1, # -A
-  Depart = 2, # -L
-)
 
 def main(argv=None):
   if argv is None:
@@ -62,7 +55,7 @@ def main(argv=None):
 
 
   if not batchMode:
-    return parse_cmd(exe, argv[1:], batchMode)
+    return parse_cmd(exe, argv[1:])
   else:
     fp = None
 
@@ -83,10 +76,13 @@ def main(argv=None):
       return 1
 
     for i in commands:
+      if len(i) == 0:
+        continue
+
       # create our new argv
       newArgv = i.split()
 
-      retVal = parse_cmd(exe, newArgv, batchMode)
+      retVal = parse_cmd(exe, newArgv)
 
       # some error...
       if retVal != 0:
@@ -94,7 +90,7 @@ def main(argv=None):
 
     return 0
 
-def parse_cmd(exe, argv, batch):
+def parse_cmd(exe, argv):
   try:
     opt, tail = getopt.getopt(argv, "T:K:B:E:G:ALR:", ["help"])
   except getopt.error as err:
@@ -105,7 +101,7 @@ def parse_cmd(exe, argv, batch):
   opt_log = None
   opt_token = None
   opt_timestamp = None
-  opt_roomid = None
+  opt_roomid = Room() # assume the foyer 
   opt_people = []
   opt_action = None
 
@@ -114,8 +110,8 @@ def parse_cmd(exe, argv, batch):
       usage(exe)
       return 0
     elif o == "-B": # deny batch mode
-      usage(exe, "Batch file passed along with other options")
-      return 1
+      # invalid doesnt tell enough...we want to keep the verbosity high
+      die("invalid", "Batch file passed along with other options")
     elif o == "-K":
       if not verifyStr(val, string.lowercase+string.uppercase+string.digits):
         usage(exe, "Token must match [a-zA-Z0-9]+")
@@ -145,7 +141,7 @@ def parse_cmd(exe, argv, batch):
         usage(exe, "Room ID must be a number")
         return 1
 
-      opt_roomid = int(val, 10)
+      opt_roomid = Room(int(val, 10))
     elif o == "-A":
       if opt_action is not None:
         usage(exe, "Person's direction was already specified. Requested action would cause tearing.")
@@ -174,10 +170,19 @@ def parse_cmd(exe, argv, batch):
     usage(exe, "No token specified")
     return 1 
 
+  if len(opt_people) == 0 or len(opt_people) > 1:
+    usage(exe, "Too many people moving around at once")
+
   if opt_action == PersonAction.Arrive:
-    pass
+    log = LogFile(opt_log, opt_token)
+    log.unseal() # XXX: we need to only unseal once if doing batch
+
+    log.arrival(opt_timestamp, opt_people[0], opt_roomid)
   elif opt_action == PersonAction.Depart:
-    pass
+    log = LogFile(opt_log, opt_token)
+    log.unseal() # XXX: we need to only unseal once if doing batch
+
+    log.departure(opt_timestamp, opt_people[0], opt_roomid)
   else:
     usage(exe, "An action was never specified")
     return 1

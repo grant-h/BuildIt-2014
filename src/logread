@@ -6,23 +6,9 @@ import sys
 import getopt
 import string
 
+from common import *
 from person import Person
 from logfile import LogFile
-
-def usage(cmd, error=None):
-  if error is not None:
-    print "Error: " + error
-
-  print("USAGE HERE")
-
-def verifyStr(toCheck, against):
-  if set(toCheck) - set(against):
-    return False
-  else:
-    return True
-
-def enum(**enums):
-  return type('Enum', (), enums)
 
 LogReadAction = enum(
   state = 1, # -S
@@ -32,6 +18,21 @@ LogReadAction = enum(
   time_present = 5, # -A
   time_present_exclude = 6 # -B
 )
+
+def usage(cmd, error=None):
+  if error is not None:
+    print "Error: " + error
+
+  print("""Usage:
+  %s -K <token> [-H] -S <log>
+  %s -K <token> [-H] -R (-E <name> | -G <name>) <log>
+
+  Optional:
+  %s -K <token> -T (-E <name> | -G <name>) <log>
+  %s -K <token> [-H] -I (-E <name> | -G <name>) [(-E <name> | -G <name>) ...] <log>
+  %s -K <token> [-H] -A -L <lower> -U <upper> <log>
+  %s -K <token> [-H] -B -L <lower1> -U <upper1> -L <lower2> -U <upper2> <log>
+  """ % (cmd, cmd, cmd, cmd, cmd, cmd))
 
 def main(argv=None):
   if argv is None:
