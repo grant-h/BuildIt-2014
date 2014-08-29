@@ -7,6 +7,7 @@ import getopt
 import string
 
 from person import Person
+from logfile import LogFile
 
 def usage(cmd, error=None):
   if error is not None:
@@ -48,7 +49,7 @@ def main(argv=None):
     usage(exe, err.msg)
     return 1
 
-  # argument list
+  # option values
   opt_token = None
   opt_log = None
   opt_outputHtml = False
@@ -164,9 +165,9 @@ def main(argv=None):
     return 1 
 
   if opt_action == LogReadAction.state:
-    """log = LogFile(logFile, token)
+    log = LogFile(opt_log, opt_token)
     log.unseal()
-    print log.dumpState()"""
+    #print log.dumpState()
     pass
   elif opt_action == LogReadAction.rooms_by_person:
     pass

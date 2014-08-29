@@ -1,1 +1,188 @@
 #!/usr/bin/env python
+# Build it, Break it, Fix it 2014 Submission
+#  Written by team KnightSec
+
+import sys
+import getopt
+import string
+
+from person import Person
+from logfile import LogFile
+
+def usage(cmd, error=None):
+  if error is not None:
+    print "Error: " + error
+
+  print("""Usage:
+  %s -T <timestamp> -K <token> (-E <employee-name> | -G <guest-name>) (-A | -L) [-R <room-id>] <log>
+  %s -B <file>
+  """ % (cmd, cmd))
+
+def verifyStr(toCheck, against):
+  if set(toCheck) - set(against):
+    return False
+  else:
+    return True
+
+def enum(**enums):
+  return type('Enum', (), enums)
+
+PersonAction = enum(
+  Arrive = 1, # -A
+  Depart = 2, # -L
+)
+
+def main(argv=None):
+  if argv is None:
+    argv = sys.argv
+
+  if len(argv) == 0:
+    usage("")
+    return 1
+
+  exe = argv[0]
+
+  opt_batchfile = None
+  batchMode = False
+
+  # just check for a batch file
+  try:
+    opt, tail = getopt.getopt(argv[1:], "B:")
+
+    for o,val in opt:
+      if o == "-B": # enter batch mode
+        opt_batchfile = val
+        batchMode = True
+
+    if len(tail) > 0 and batchMode:
+      usage(exe, "Batch file passed with extra options")
+      return 1
+  except getopt.error as err:
+    batchMode = False
+
+
+  if not batchMode:
+    return parse_cmd(exe, argv[1:], batchMode)
+  else:
+    fp = None
+
+    try:
+      fp = open(opt_batchfile, "r")
+    except IOError, err:
+      print("Could not open batch file \'%s\' for reading: %s" %
+          (opt_batchfile, err.strerror))
+      return 1
+
+    # split the lines
+    commands = fp.read().split("\n")
+    fp.close()
+
+    # get a life
+    if len(commands) == 0:
+      usage(exe, "Passed in an empty batchfile...what are you doing with your life?")
+      return 1
+
+    for i in commands:
+      # create our new argv
+      newArgv = i.split()
+
+      retVal = parse_cmd(exe, newArgv, batchMode)
+
+      # some error...
+      if retVal != 0:
+        return retVal
+
+    return 0
+
+def parse_cmd(exe, argv, batch):
+  try:
+    opt, tail = getopt.getopt(argv, "T:K:B:E:G:ALR:", ["help"])
+  except getopt.error as err:
+    usage(exe, err.msg)
+    return 1
+
+  # option values
+  opt_log = None
+  opt_token = None
+  opt_timestamp = None
+  opt_roomid = None
+  opt_people = []
+  opt_action = None
+
+  for o,val in opt:
+    if o == "--help":
+      usage(exe)
+      return 0
+    elif o == "-B": # deny batch mode
+      usage(exe, "Batch file passed along with other options")
+      return 1
+    elif o == "-K":
+      if not verifyStr(val, string.lowercase+string.uppercase+string.digits):
+        usage(exe, "Token must match [a-zA-Z0-9]+")
+        return 1
+
+      opt_token = val
+    elif o == "-T":
+      if not verifyStr(val, string.digits):
+        usage(exe, "Timestamp must be a number")
+        return 1
+
+      opt_timestamp = int(val, 10)
+    elif o == "-E":
+      if not verifyStr(val, string.lowercase+string.uppercase):
+        usage(exe, "Employee name must match [a-zA-Z]+")
+        return 1
+
+      opt_people.append(Person(val, False))
+    elif o == "-G":
+      if not verifyStr(val, string.lowercase+string.uppercase):
+        usage(exe, "Guest name must match [a-zA-Z]+")
+        return 1
+
+      opt_people.append(Person(val, True))
+    elif o == "-R":
+      if not verifyStr(val, string.digits):
+        usage(exe, "Room ID must be a number")
+        return 1
+
+      opt_roomid = int(val, 10)
+    elif o == "-A":
+      if opt_action is not None:
+        usage(exe, "Person's direction was already specified. Requested action would cause tearing.")
+        return 1
+
+      opt_action = PersonAction.Arrive
+    elif o == "-L":
+      if opt_action is not None:
+        usage(exe, "Person's direction was already specified. Requested action would cause tearing.")
+        return 1
+      opt_action = PersonAction.Depart
+
+  if opt_timestamp is None:
+    usage(exe, "No timestamp specified")
+    return 1 
+
+  # we hope this is the log...
+  if len(tail) > 0:
+    opt_log = tail[0]
+
+  if opt_log is None:
+    usage(exe, "No log file specified")
+    return 1
+
+  if opt_token is None:
+    usage(exe, "No token specified")
+    return 1 
+
+  if opt_action == PersonAction.Arrive:
+    pass
+  elif opt_action == PersonAction.Depart:
+    pass
+  else:
+    usage(exe, "An action was never specified")
+    return 1
+
+  return 0
+
+if __name__ == "__main__":
+  sys.exit(main(sys.argv))

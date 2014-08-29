@@ -1,3 +1,6 @@
+# Build it, Break it, Fix it 2014 Submission
+#  Written by team KnightSec
+
 class LogFile(object):
   logPath = None
   token = None
@@ -7,14 +10,14 @@ class LogFile(object):
   rooms = []
   
   def __init__(self, logPath, token): 
-    self.logPath = filePath
+    self.logPath = logPath
     self.token = token
 
   def unseal(self):
     try:
       fp = open(self.logPath, "rb")
     except IOError, err:
-      print("Error while opening log file: " + err.msg)
+      print("Error while opening log file: " + err.strerror)
       return False
 
     # read that junk in to memory
@@ -27,3 +30,5 @@ class LogFile(object):
     # Uncompress
     # Unserialize
     # Parse data
+
+    return True
