@@ -159,11 +159,11 @@ def main(argv=None):
     log.unseal()
     print log.dumpState(opt_outputHtml)
   elif opt_action == LogReadAction.rooms_by_person:
-    if len(people) != 1:
+    if len(opt_people) != 1:
       usage(exe, "-R specified with two people")
 
     log.unseal()
-    print log.getRoomsEnteredBy(people[0], opt_outputHtml)
+    print log.getRoomsEnteredBy(opt_people[0], opt_outputHtml)
   elif opt_action == LogReadAction.time_by_person:
     pass
   elif opt_action == LogReadAction.rooms_occupied_simul:
@@ -175,6 +175,7 @@ def main(argv=None):
   else:
     usage(exe, "An action was never specified")
 
+  log.dump()
   log.seal()
 
   return 0

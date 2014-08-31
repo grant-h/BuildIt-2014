@@ -187,10 +187,10 @@ class LogFile(object):
     header = "<tr>"
     body = ""
     numCols = len(colList)
-    numRows = 1000000000 # inf
+    numRows = -1 # inf
 
     for i in rows:
-      numRows = min(len(i), numRows)
+      numRows = max(len(i), numRows)
 
     # generate header
     for i in colList:
@@ -203,11 +203,31 @@ class LogFile(object):
       body += "<tr>"
 
       for data in rows:
-        body += "<td>" + str(data[i]) + "</td>"
+        if len(data) > i:
+          body += "<td>" + str(data[i]) + "</td>"
 
       body += "</tr>"
 
     return "<table>" + header + body + "</table>"
+
+  def getRoomsEnteredBy(self, person, html):
+    rms = []
+
+    for e in self.events:
+      num = e.room.number
+      if person == e.person and num >= 0 and num not in rms:
+        rms.append(e.room.number)
+
+    rms = [str(s) for s in rms]
+
+    if html:
+      outstr = "<html><body>"
+      outstr += self.genHTMLTable(['Rooms'], [rms])
+      outstr += "</body></html>"
+
+      return outstr
+    else:
+      return ','.join(str(s) for s in rms)
 
   # ------ Event State Management -------
   def arrival(self, time, person, room):
