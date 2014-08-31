@@ -6,12 +6,12 @@ from room import Room
 class Person(object):
   name = ""
   guest = None
-  room = None
+  room = Room() # assume outside
 
   def __init__(self, name, guest):
     self.name = name
     self.guest = guest
-    self.room = None
+    self.room = Room()
 
   def __str__(self):
     return self.name

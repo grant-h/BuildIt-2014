@@ -20,19 +20,26 @@ LogReadAction = enum(
 )
 
 def usage(cmd, error=None):
-  if error is not None:
+  DEBUG = True
+  
+  if error is not None and DEBUG:
     print "Error: " + error
 
-  print("""Usage:
-  %s -K <token> [-H] -S <log>
-  %s -K <token> [-H] -R (-E <name> | -G <name>) <log>
+  if DEBUG:
+    print("""Usage:
+    %s -K <token> [-H] -S <log>
+    %s -K <token> [-H] -R (-E <name> | -G <name>) <log>
 
-  Optional:
-  %s -K <token> -T (-E <name> | -G <name>) <log>
-  %s -K <token> [-H] -I (-E <name> | -G <name>) [(-E <name> | -G <name>) ...] <log>
-  %s -K <token> [-H] -A -L <lower> -U <upper> <log>
-  %s -K <token> [-H] -B -L <lower1> -U <upper1> -L <lower2> -U <upper2> <log>
-  """ % (cmd, cmd, cmd, cmd, cmd, cmd))
+    Optional:
+    %s -K <token> -T (-E <name> | -G <name>) <log>
+    %s -K <token> [-H] -I (-E <name> | -G <name>) [(-E <name> | -G <name>) ...] <log>
+    %s -K <token> [-H] -A -L <lower> -U <upper> <log>
+    %s -K <token> [-H] -B -L <lower1> -U <upper1> -L <lower2> -U <upper2> <log>
+    """ % (cmd, cmd, cmd, cmd, cmd, cmd))
+  else:
+    print("invalid")
+
+  sys.exit(-1)
 
 def main(argv=None):
   if argv is None:
@@ -40,7 +47,6 @@ def main(argv=None):
 
   if len(argv) == 0:
     usage("")
-    return 1
 
   exe = argv[0]
 
@@ -48,7 +54,6 @@ def main(argv=None):
     opt, tail = getopt.getopt(argv[1:], "K:HSRE:G:TABL:U:", ["help"])
   except getopt.error as err:
     usage(exe, err.msg)
-    return 1
 
   # option values
   opt_token = None
@@ -65,33 +70,27 @@ def main(argv=None):
   for o,val in opt:
     if o == "--help":
       usage(exe)
-      return 0
     elif o == "-K": # Token
       if not verifyStr(val, string.lowercase+string.uppercase+string.digits):
         usage(exe, "Token must match [a-zA-Z0-9]+")
-        return 1
 
       opt_token = val
     elif o == "-E": # Token
       if not verifyStr(val, string.lowercase+string.uppercase):
         usage(exe, "Employee name must match [a-zA-Z]+")
-        return 1
 
       opt_people.append(Person(val, False))
     elif o == "-G": # Token
       if not verifyStr(val, string.lowercase+string.uppercase):
         usage(exe, "Guest name must match [a-zA-Z]+")
-        return 1
 
       opt_people.append(Person(val, True))
     elif o == "-L":
       if not verifyStr(val, string.digits):
         usage(exe, "Lower bound must be specified in seconds")
-        return 1
       
       if seenLower:
         usage(exe, "Two lower bounds seen, but no upper in between!")
-        return 1
 
       # we've seen a lower, now expect an upper
       seenLower = True
@@ -99,11 +98,9 @@ def main(argv=None):
     elif o == "-U":
       if not verifyStr(val, string.digits):
         usage(exe, "Upper bound must be specified in seconds")
-        return 1
       
       if not seenLower:
         usage(exe, "Saw an upper bound before a lower bound")
-        return 1
 
       # we've seen an upper. we're done
       seenLower = False
@@ -114,44 +111,37 @@ def main(argv=None):
     elif o == "-S": 
       if opt_action is not None:
         usage(exe, "the " + o + " option collides with another option")
-        return 1
 
       opt_action = LogReadAction.state = 1 # -S
     elif o == "-R": 
       if opt_action is not None:
         usage(exe, "the " + o + " option collides with another option")
-        return 1
 
       opt_action = LogReadAction.rooms_by_person = 2 # -R
     elif o == "-T": 
       if opt_action is not None:
         usage(exe, "the " + o + " option collides with another option")
-        return 1
 
       opt_action = LogReadAction.time_by_person = 3 # -T
     elif o == "-I": 
       if opt_action is not None:
         usage(exe, "the " + o + " option collides with another option")
-        return 1
 
       opt_action = LogReadAction.rooms_occupied_simul = 4 # -I
     elif o == "-A": 
       if opt_action is not None:
         usage(exe, "the " + o + " option collides with another option")
-        return 1
 
       opt_action = LogReadAction.time_present = 5 # -A
     elif o == "-B": 
       if opt_action is not None:
         usage(exe, "the " + o + " option collides with another option")
-        return 1
 
       opt_action = LogReadAction.time_present_exclude = 6 # -B
 
   # check for dangling, unmatched lower bounds
   if seenLower:
     usage(exe, "Done parsing args, but I never saw an upper bound for -L " + str(lowerTmp))
-    return 1
 
   # we hope this is the log...
   if len(tail) > 0:
@@ -159,19 +149,21 @@ def main(argv=None):
 
   if opt_log is None:
     usage(exe, "No log file specified")
-    return 1
 
   if opt_token is None:
     usage(exe, "No token specified")
-    return 1 
+
+  log = LogFile(opt_log, opt_token)
 
   if opt_action == LogReadAction.state:
-    log = LogFile(opt_log, opt_token)
     log.unseal()
-    #print log.dumpState()
-    pass
+    print log.dumpState(opt_outputHtml)
   elif opt_action == LogReadAction.rooms_by_person:
-    pass
+    if len(people) != 1:
+      usage(exe, "-R specified with two people")
+
+    log.unseal()
+    print log.getRoomsEnteredBy(people[0], opt_outputHtml)
   elif opt_action == LogReadAction.time_by_person:
     pass
   elif opt_action == LogReadAction.rooms_occupied_simul:
@@ -182,7 +174,8 @@ def main(argv=None):
     pass
   else:
     usage(exe, "An action was never specified")
-    return 1
+
+  log.seal()
 
   return 0
 

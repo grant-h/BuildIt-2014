@@ -1,6 +1,6 @@
 import sys
 
-DEBUG = True
+DEBUG = False
 
 def verifyStr(toCheck, against):
   if set(toCheck) - set(against):
