@@ -306,4 +306,7 @@ class LogFile(object):
       die("invalid", str(person) + " is bending space time. Nab him! (%s -> %s)" %
           (str(curRoom), str(dstRoom)))
 
+    # update the max time
+    self.maxTime = max(self.maxTime, event.timestamp)
+    # add the event
     self.events.append(event)

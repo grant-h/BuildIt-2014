@@ -19,6 +19,6 @@ def die(msg, extra_msg=None, retVal=-1):
   if extra_msg is not None and DEBUG:
     pdebug(extra_msg)
 
-  sys.stderr.write(msg + "\n")
+  sys.stdout.write(msg + "\n")
   sys.exit(retVal)
 
