@@ -6,6 +6,7 @@ from common import *
 from room import Room
 from logevent import Event,EventType
 from person import Person
+from security import Security
 
 class LogFile(object):
 
@@ -64,24 +65,30 @@ class LogFile(object):
     fileData = fp.read()
     fp.close()
 
-    # TODO
+    if len(fileData) < 16: 
+      die("security error", "Not enough space for HMAC")
+
     # Verify HMAC
-    # Verify Nonce to check for modification by logappend
+    hmac = fileData[0:16]
+    otherData = fileData[16:]
+
+    outHmac = Security.hmac_md5(self.token, otherData)
+
+    if hmac != outHmac:
+      die("security error", "Bad matching HMAC")
+
     # Unencrypt
-    # Uncompress
-    # Unserialize
-    # read the file state in to memory
-    #   parseFile(fileData)
+    fileData = Security.decrypt(self.token, otherData)
 
     # WARNING JANK CODE ALERT
     lines = fileData.split("\n")
 
     # verify that the first line is our token
-    if lines[0] != self.token:
-      die("security error", "Failed to match token against saved file")
+    #if lines[0] != self.token:
+    #  die("security error", "Failed to match token against saved file")
 
     # read in the events
-    for l in lines[1:]:
+    for l in lines:
       if l == "":
         continue
 
@@ -89,6 +96,35 @@ class LogFile(object):
         die("invalid", "Corrupt event line: " + l)
 
     return True
+
+  # for each event, seal it up in our target file
+  def seal(self):
+    fp = None
+
+    try:
+      fp = open(self.logPath, "wb")
+    except IOError, e:
+      die("invalid", "Could not reseal the file")
+
+    dataOut = "" 
+
+    #dataOut += self.token
+
+    for e in self.events:
+      dataOut += e.serialize() + "\n"
+
+    enc = Security.encrypt(self.token, dataOut)
+
+    fp.write(Security.hmac_md5(self.token, enc))
+    fp.write(enc)
+
+    """fp.write(self.token + "\n")
+
+    for e in self.events:
+      fp.write(e.serialize() + "\n")"""
+
+    fp.close()
+
 
   def parseEvent(self, event):
     evt = Event.deserialize(event)
@@ -102,31 +138,6 @@ class LogFile(object):
       self.departure(evt.timestamp, evt.person, evt.room)
 
     return True
-
-  # for each event, seal it up in our target file
-  def seal(self):
-    fp = None
-
-    """self.createNew()
-
-    try:
-      fp = open(self.logPath, "rb")
-    except IOError, err:
-      die("invalid", "Created the log file, but I can't open it!")
-
-    fp.close()"""
-
-    try:
-      fp = open(self.logPath, "wb")
-    except IOError, e:
-      die("invalid", "Could not reseal the file")
-
-    fp.write(self.token + "\n")
-
-    for e in self.events:
-      fp.write(e.serialize() + "\n")
-
-    fp.close()
 
   def lookupPerson(self, person):
     if person.guest:

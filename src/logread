@@ -157,7 +157,7 @@ def main(argv=None):
 
   if opt_action == LogReadAction.state:
     log.unseal()
-    print log.dumpState(opt_outputHtml)
+    sys.stdout.write(log.dumpState(opt_outputHtml))
   elif opt_action == LogReadAction.rooms_by_person:
     if len(opt_people) != 1:
       usage(exe, "-R specified with two people")
