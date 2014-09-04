@@ -2,322 +2,222 @@
 #  Written by team KnightSec
 
 from common import *
+from eventstate import EventState
 
-from room import Room
-from logevent import Event,EventType
-from person import Person
-from security import Security
+# import win
+from Crypto.Hash import HMAC,SHA256
+from Crypto.Cipher import AES 
+from Crypto.Protocol.KDF import PBKDF2 
+from Crypto import Random
+
+# file format constants
+MAGIC = "BIBI"
+HMAC_LEN = SHA256.digest_size
+IV_LEN = AES.block_size
+HMAC_SALT_LEN = 16
+ENC_SALT_LEN = 16
 
 class LogFile(object):
-
   logPath = None
-  fileHandle = None
   token = None
 
-  maxTime = -1
-  events = []
-  # mappings of names to people
-  guests = dict()
-  employees = dict()
-  rooms = dict()  # int(roomID) : Person
-  
+  # some event stats
+  state = None # actual gallery state handler
+  newLogFile = False
+  unsealed = False
+  initialNumEvents = 0
+
+  # cryptographic data
+  hmacSalt = ""
+  encryptSalt = ""
+  encryptIV = ""
+  hmacKey = ""
+  encryptionKey = ""
+
   def __init__(self, logPath, token): 
     self.logPath = logPath
     self.token = token
 
-  """
-  createNew(token):
+  # Would prefer a KDF as per the research here
+  # http://palms.ee.princeton.edu/PALMSopen/yao05design.pdf
+  # It looks like PyCrypto already strengthens PBKDF2 a bit
+  # using XOR and appending the current iteration count
+  def hmac(self, msg):
+    # use SHA256 instead of MD5
+    return HMAC.new(self.hmacKey, msg, SHA256).digest()
 
-  Create a new file in memory and a blank one on disk.
-  Uses the specified token to create the file.
-  """
-  def createNew(self):
-    try:
-      fp = open(self.logPath, "wb")
-    except IOError, err:
-      die("invalid", "Failed to create new log file")
+  def enc(self, msg):
+    aes = AES.new(self.encryptionKey, AES.MODE_CBC, self.encryptIV)
 
-    # hold the file handle to prevent other writers
-    fileHandle = fp
+    BS = AES.block_size
+    padLen = BS - len(msg) % BS
+    pad = lambda m: m+padLen*chr(padLen) 
 
-    # no events
-    self.events = []
+    # let the caller decide what to do with the IV
+    return aes.encrypt(pad(msg))
 
-  def unseal(self):
+  def dec(self, msg):
+    unpad = lambda m: m[0:-ord(m[-1])]
+
+    aes = AES.new(self.encryptionKey, AES.MODE_CBC, self.encryptIV)
+    plaintext = aes.decrypt(msg)
+
+    return unpad(plaintext)
+
+  def unseal(self, secure=True):
     fp = None
 
     try:
       fp = open(self.logPath, "rb")
+      self.newLogFile = False
     except IOError, err:
-      pdebug("No log file found. Creating new one...")
-      """self.createNew()
+      pdebug("No log file found. Starting with blank event state")
+      self.newLogFile = True
 
-      try:
-        fp = open(self.logPath, "rb")
-      except IOError, err:
-        die("invalid", "Created the log file, but I can't open it!")
+      # start with a blank state
+      self.state = EventState()
+      self.unsealed = True
+      self.initialNumEvents = 0
 
-      fp.close()"""
-      return True
+      return self.state
 
     # read that junk in to memory
-    # TODO FIXME: prevent multiple readers...
     fileData = fp.read()
     fp.close()
 
-    if len(fileData) < 16: 
-      die("security error", "Not enough space for HMAC")
+    # ----- File Layout -----
+    # SECURE: 
+    # BIBI[HMAC (16 bytes)][HMAC Salt][Encrypt Salt][IV][Encrypted Blob]
+    # 
+    # [Encrypted Blob] -- <DECRYPT> --> [Raw Events]
+    #
+    # INSECURE:
+    # [Raw Events] = [EventLine]\n .. [EventLine]\n
+    # EventLine = [timestamp],[arrive/leave (1 byte)],[name],[isguest],[room#]
 
-    # Verify HMAC
-    hmac = fileData[0:16]
-    otherData = fileData[16:]
+    if secure:
+      HEADER_LEN = len(MAGIC) + HMAC_LEN + HMAC_SALT_LEN + ENC_SALT_LEN + IV_LEN
 
-    outHmac = Security.hmac_md5(self.token, otherData)
+      if len(fileData) < HEADER_LEN: 
+        die("invalid", "Not enough space for file header")
 
-    if hmac != outHmac:
-      die("security error", "Bad matching HMAC")
+      # Check for the magic \o/ *^*^*^*^*!
+      if fileData[0:4] != MAGIC:
+        die("invalid", "Invalid magic bytes found")
 
-    # Unencrypt
-    fileData = Security.decrypt(self.token, otherData)
+      ptr = len(MAGIC)
 
-    # WARNING JANK CODE ALERT
+      # Read the HMAC
+      hmac = fileData[ptr:ptr+HMAC_LEN]
+      ptr += HMAC_LEN 
+
+      # Grab the HMAC salt
+      self.hmacSalt = fileData[ptr:ptr+HMAC_SALT_LEN]
+      ptr += HMAC_SALT_LEN 
+
+      # Grab the encrypt salt
+      self.encryptSalt = fileData[ptr:ptr+HMAC_SALT_LEN]
+      ptr += ENC_SALT_LEN
+
+      # Read the IV off the byte stream
+      self.encryptIV = fileData[ptr:ptr+IV_LEN]
+      ptr += IV_LEN
+
+      assert ptr == HEADER_LEN
+
+      # Cut off the header
+      encBlob = fileData[ptr:]
+
+      # Using our salts and token, derive the keys to perform the checks
+      self.hmacKey = PBKDF2(self.token, self.hmacSalt)
+      self.encryptionKey = PBKDF2(self.token, self.encryptSalt)
+
+      # Generate the HMAC
+      tryHmac = self.hmac(encBlob)
+
+      if hmac != tryHmac:
+        die("security error", "Integrity of the encrypted container failed to be verified")
+
+      # Decrypt
+      fileData = self.dec(encBlob)
+
     lines = fileData.split("\n")
 
-    # verify that the first line is our token
-    #if lines[0] != self.token:
-    #  die("security error", "Failed to match token against saved file")
+    try:
+      self.state = EventState(lines)
+      self.unsealed = True
+      self.initialNumEvents = len(self.state.events)
 
-    # read in the events
-    for l in lines:
-      if l == "":
-        continue
-
-      if not self.parseEvent(l):
-        die("invalid", "Corrupt event line: " + l)
-
-    return True
+      return self.state
+    except ValueError, e:
+      die("invalid", e.message)
 
   # for each event, seal it up in our target file
-  def seal(self):
+  def seal(self, secure=True):
+
+    if not self.unsealed:
+      return
+
+    # check to see if anything was changed
+    # no need to write anything if nothing was changed
+    if len(self.state.events) == self.initialNumEvents:
+      return
+
     fp = None
 
     try:
-      fp = open(self.logPath, "wb")
-    except IOError, e:
-      die("invalid", "Could not reseal the file")
+      # was this the first time the file has been written to?
+      if self.newLogFile: # WARNING: race condition, check again and lock XXX
+        # TODO: lock the file for writing
+        fp = open(self.logPath, "wb")
 
-    dataOut = "" 
-
-    #dataOut += self.token
-
-    for e in self.events:
-      dataOut += e.serialize() + "\n"
-
-    enc = Security.encrypt(self.token, dataOut)
-
-    fp.write(Security.hmac_md5(self.token, enc))
-    fp.write(enc)
-
-    """fp.write(self.token + "\n")
-
-    for e in self.events:
-      fp.write(e.serialize() + "\n")"""
-
-    fp.close()
-
-
-  def parseEvent(self, event):
-    evt = Event.deserialize(event)
-
-    if evt is None:
-      return False
-
-    if evt.eventType == EventType.Arrival:
-      self.arrival(evt.timestamp, evt.person, evt.room)
-    elif evt.eventType == EventType.Departure:
-      self.departure(evt.timestamp, evt.person, evt.room)
-
-    return True
-
-  def lookupPerson(self, person):
-    if person.guest:
-      return self.guests.get(person.name)
-    else:
-      return self.employees.get(person.name)
-
-  def addPerson(self, person):
-    if person.guest:
-      return self.guests.update({person.name : person})
-    else:
-      return self.employees.update({person.name : person})
-
-  def rmPerson(self, person):
-    if person.guest:
-      del self.guests[person.name]
-    else:
-      del self.employees[person.name]
-
-  def dump(self):
-    pdebug("DUMP")
-    for i in self.events:
-      pdebug(str(i))
-
-  def dumpState(self, html):
-    outstr = ""
-    empList = sorted(self.employees.items(), key=lambda e: e[0]) 
-    empList = [i[0] for i in empList]
-
-    guestList = sorted(self.guests.items(), key=lambda e: e[0])
-    guestList = [i[0] for i in guestList]
-
-    roomList = sorted(self.rooms.items(), key=lambda e: e[0])
-    peopleList = []
-
-    # flatten the list of lists
-    for num,peep in roomList:
-      peopleList.append(",".join(sorted([i.name for i in peep])))
-
-    # make room list just a bunch of numbers
-    roomList = [i[0] for i in roomList]
-
-    if html:
-      outstr += "<html><body>"
-      outstr += self.genHTMLTable(['Employee', 'Guest'], [empList, guestList])
-      outstr += self.genHTMLTable(['Room ID', 'Occupants'], [roomList, peopleList])
-      outstr += "</html></body>"
-    else:
-      outstr += ",".join(empList) + "\n"
-      outstr += ",".join(guestList) + "\n"
-
-      for i,num in enumerate(roomList):
-        outstr += "%d: " % (num) + peopleList[i] + "\n"
-
-    return outstr
-
-  def genHTMLTable(self, colList, rows):
-    header = "<tr>"
-    body = ""
-    numCols = len(colList)
-    numRows = -1 # inf
-
-    for i in rows:
-      numRows = max(len(i), numRows)
-
-    # generate header
-    for i in colList:
-      header += "<th>" + i + "</th>"
-
-    header += "</tr>"
-
-    # generate data cells
-    for i in xrange(numRows):
-      body += "<tr>"
-
-      for data in rows:
-        if len(data) > i:
-          body += "<td>" + str(data[i]) + "</td>"
-
-      body += "</tr>"
-
-    return "<table>" + header + body + "</table>"
-
-  def getRoomsEnteredBy(self, person, html):
-    rms = []
-
-    for e in self.events:
-      num = e.room.number
-      if person == e.person and num >= 0 and num not in rms:
-        rms.append(e.room.number)
-
-    rms = [str(s) for s in rms]
-
-    if html:
-      outstr = "<html><body>"
-      outstr += self.genHTMLTable(['Rooms'], [rms])
-      outstr += "</body></html>"
-
-      return outstr
-    else:
-      return ','.join(str(s) for s in rms)
-
-  # ------ Event State Management -------
-  def arrival(self, time, person, room):
-    if time <= self.maxTime:
-      die("invalid", "Attempted to add event with lower than or equal time")
-
-    # look up the miscreant
-    realPerson = self.lookupPerson(person)
-
-    # person isnt in the gallery right now. they can arrive in the foyer
-    if realPerson is None and room.isFoyer():
-      self.addPerson(person)
-      return self.appendEvent(time, EventType.Arrival, person, room)
-    # person is here already
-    elif realPerson is not None:
-      return self.appendEvent(time, EventType.Arrival, realPerson, room)
-    # everything else is wrong
-    else:
-      die("invalid", str(person) + " tried to break in")
-
-  def departure(self, time, person, room):
-    if time <= self.maxTime:
-      die("invalid", "Attempted to add event with lower than or equal time")
-
-    # whoareyou
-    realPerson = self.lookupPerson(person)
-
-    # they cant leave if they arent here
-    if realPerson is None:
-      die("invalid", "Person tried to leave but isnt here")
-    else:
-      # person is in the gallery right now. they can move about
-      return self.appendEvent(time, EventType.Departure, realPerson, room)
-
-  def appendEvent(self, time, eventType, person, dstRoom):
-    # it is assumed we have a person object
-    curRoom = person.room
-    event = None
-
-    # outside -> foyer
-    if curRoom.isOutside() and dstRoom.isFoyer() and eventType == EventType.Arrival:
-      person.room = dstRoom  # welcome to the gallery
-      event = Event(time, eventType, person, dstRoom)
-    # foyer -> room
-    elif curRoom.isFoyer() and dstRoom.isRoom() and eventType == EventType.Arrival:
-      person.room = dstRoom 
-
-      if dstRoom.number not in self.rooms:
-        self.rooms.update({dstRoom.number : [person]})
+      # we should just append a new event to the log file
+      # no need to rewrite the entire thing
       else:
-        self.rooms[dstRoom.number].append(person)
+        fp = open(self.logPath, "wb") # for now...
+        #fp = open(self.logPath, "ab")
 
-      event = Event(time, eventType, person, dstRoom)
-    # room -> foyer
-    elif curRoom.isRoom() and dstRoom == curRoom and eventType == EventType.Departure:
-      person.room = Room(Room.FOYER) # enter the foyer again
+        # Goal: seek backwards enough encrypted chunks
+        # until we can completely recover the last event line.
+        # Then, write the last event line and any extraneous data
+        # and append our new event(s)
+        #fp.seek(security
+    except IOError, e:
+      die("invalid", "Could not modify the log file: " + e.strerror)
 
-      # delete person from room
-      peepList = self.rooms[curRoom.number] # list of strs
-      peepList.remove(person)
+    flatLog = "" 
+    dataOut = ""
 
-      if len(peepList) == 0:
-        del self.rooms[curRoom.number]
+    for e in self.state.events:
+      flatLog += e.serialize() + "\n"
 
-      event = Event(time, eventType, person, dstRoom)
-    # foyer -> outside
-    elif curRoom.isFoyer() and dstRoom.isFoyer() and eventType == EventType.Departure:
-      person.room = Room() # go outside
-      self.rmPerson(person)
+    if secure:
+      # generate our salts and keys if needed
+      if self.newLogFile:
+        randGen = Random.new()
+        self.hmacSalt = randGen.read(HMAC_SALT_LEN)
+        self.encryptSalt = randGen.read(ENC_SALT_LEN)
+        self.encryptIV = randGen.read(IV_LEN)
 
-      # checking...
-      assert self.lookupPerson(person) is None
+        self.hmacKey = PBKDF2(self.token, self.hmacSalt)
+        self.encryptionKey = PBKDF2(self.token, self.encryptSalt)
 
-      event = Event(time, eventType, person, dstRoom)
+      # Encrypt the flat log file
+      encLog = self.enc(flatLog)
+
+      # Calculate the HMAC
+      hmac = self.hmac(encLog)
+
+      # Concatenate all of our files
+      dataOut = MAGIC + hmac + self.hmacSalt + \
+        self.encryptSalt + self.encryptIV + encLog
     else:
-      die("invalid", str(person) + " is bending space time. Nab him! (%s -> %s)" %
-          (str(curRoom), str(dstRoom)))
+      dataOut = flatLog
+      
+    try:
+      fp.write(dataOut) # could be locked
+      fp.close()
 
-    # update the max time
-    self.maxTime = max(self.maxTime, event.timestamp)
-    # add the event
-    self.events.append(event)
+      self.newLogFile = False
+    except IOError:
+      die("invalid", "Failed to write data back to the database")

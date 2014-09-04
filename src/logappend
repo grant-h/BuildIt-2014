@@ -10,6 +10,7 @@ from common import *
 from room import Room
 from person import Person
 from logfile import LogFile
+from eventstate import EventState,EventType
 
 PersonAction = enum(
   Arrive = 1, # -A
@@ -59,7 +60,6 @@ def main(argv=None):
       return 1
   except getopt.error as err:
     batchMode = False
-
 
   if not batchMode:
     return parse_cmd(exe, argv[1:])
@@ -182,23 +182,21 @@ def parse_cmd(exe, argv):
   if opt_token is None:
     usage(exe, "No token specified")
 
-  if len(opt_people) == 0 or len(opt_people) > 1:
+  if len(opt_people) == 0:
+    usage(exe, "No person specified")
+  elif len(opt_people) > 1:
     usage(exe, "Too many people moving around at once")
 
   log = LogFile(opt_log, opt_token)
+  state = log.unseal()
 
   if opt_action == PersonAction.Arrive:
-    log.unseal() # XXX: we need to only unseal once if doing batch
-
-    log.arrival(opt_timestamp, opt_people[0], opt_roomid)
+    state.arrival(opt_timestamp, opt_people[0], opt_roomid)
   elif opt_action == PersonAction.Depart:
-    log.unseal() # XXX: we need to only unseal once if doing batch
-
-    log.departure(opt_timestamp, opt_people[0], opt_roomid)
+    state.departure(opt_timestamp, opt_people[0], opt_roomid)
   else:
     usage(exe, "An action was never specified")
 
-  log.dump()
   log.seal()
 
   return 0

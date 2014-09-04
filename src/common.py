@@ -1,6 +1,12 @@
+# Build it, Break it, Fix it 2014 Submission
+#  Written by team KnightSec
+
 import sys
 
 DEBUG = False
+
+def debug():
+  return DEBUG
 
 def verifyStr(toCheck, against):
   if set(toCheck) - set(against):

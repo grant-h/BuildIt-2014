@@ -44,7 +44,6 @@ class Event(object):
 
     return cls(timestamp, eventType, person, room)
 
-
   def __str__(self):
     eventStr = ""
 

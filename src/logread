@@ -9,6 +9,7 @@ import string
 from common import *
 from person import Person
 from logfile import LogFile
+from eventstate import EventState,EventType
 
 LogReadAction = enum(
   state = 1, # -S
@@ -154,16 +155,17 @@ def main(argv=None):
     usage(exe, "No token specified")
 
   log = LogFile(opt_log, opt_token)
+  state = log.unseal()
 
   if opt_action == LogReadAction.state:
-    log.unseal()
-    sys.stdout.write(log.dumpState(opt_outputHtml))
+    print state.getFormattedState(opt_outputHtml)
   elif opt_action == LogReadAction.rooms_by_person:
-    if len(opt_people) != 1:
-      usage(exe, "-R specified with two people")
+    if len(opt_people) > 1:
+      usage(exe, "-R specified with more than one person")
+    elif len(opt_people) < 1:
+      usage(exe, "-R specified without anyone")
 
-    log.unseal()
-    print log.getRoomsEnteredBy(opt_people[0], opt_outputHtml)
+    print state.getRoomsEnteredBy(opt_people[0], opt_outputHtml)
   elif opt_action == LogReadAction.time_by_person:
     pass
   elif opt_action == LogReadAction.rooms_occupied_simul:
@@ -174,9 +176,6 @@ def main(argv=None):
     pass
   else:
     usage(exe, "An action was never specified")
-
-  log.dump()
-  log.seal()
 
   return 0
 
