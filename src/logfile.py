@@ -64,6 +64,10 @@ class LogFile(object):
 
     return unpad(plaintext)
 
+  def kdf(self, salt):
+    # changing the KDF count is the speed-limiting factor
+    return PBKDF2(self.token, salt, count=50)
+
   def unseal(self, secure=True):
     fp = None
 
@@ -129,8 +133,8 @@ class LogFile(object):
       encBlob = fileData[ptr:]
 
       # Using our salts and token, derive the keys to perform the checks
-      self.hmacKey = PBKDF2(self.token, self.hmacSalt)
-      self.encryptionKey = PBKDF2(self.token, self.encryptSalt)
+      self.hmacKey = self.kdf(self.hmacSalt)
+      self.encryptionKey = self.kdf(self.encryptSalt)
 
       # Generate the HMAC
       tryHmac = self.hmac(encBlob)
@@ -199,8 +203,8 @@ class LogFile(object):
         self.encryptSalt = randGen.read(ENC_SALT_LEN)
         self.encryptIV = randGen.read(IV_LEN)
 
-        self.hmacKey = PBKDF2(self.token, self.hmacSalt)
-        self.encryptionKey = PBKDF2(self.token, self.encryptSalt)
+        self.hmacKey = self.kdf(self.hmacSalt)
+        self.encryptionKey = self.kdf(self.encryptSalt)
 
       # Encrypt the flat log file
       encLog = self.enc(flatLog)
