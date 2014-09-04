@@ -134,6 +134,75 @@ class EventState(object):
 
     return "<table>" + header + body + "</table>"
 
+  def getTotalTimeSpent(self, person):
+    inGallery = False
+    startTime = -1
+    total = 0
+
+    # walk the events and tally up the amount of time spent in the gallery
+    for e in self.events:
+      # guy arrives to the gallery
+      if person == e.person and e.room.isFoyer() and e.eventType == EventType.Arrival:
+        inGallery = True
+        startTime = e.timestamp
+      # guy departs the gallery
+      elif person == e.person and e.room.isFoyer() and e.eventType == EventType.Departure:
+        inGallery = False
+        total += e.timestamp - startTime
+        startTime = -1
+
+    # the person is still in the gallery
+    if inGallery:
+      total += self.events[-1].timestamp - startTime
+
+    return total
+
+  def getRoomProximity(self, people, html):
+    same = []
+
+    # walk the events and maintain which rooms people are in 
+    for e in self.events:
+      peep = None
+
+      for p in people:
+        if e.person == p: # an event involving a friend
+          peep = p
+          break
+
+      if peep is None:
+        continue
+
+      # update the room
+      peep.room = e.room
+
+      # we dont care if they are drinking cocktails
+      if e.room.isFoyer():
+        continue
+
+      # for each person, check the rooms
+      sameRoom = True
+      for p in people:
+        if p.room != e.room:
+          sameRoom = False
+          break
+
+      if sameRoom and e.room.number not in same:
+        same.append(e.room.number)
+
+    if len(same):
+      # ascending order
+      same = sorted(same)
+      same = [str(p) for p in same]
+
+    if html:
+      outstr = "<html><body>"
+      outstr += self.genHTMLTable(['Rooms'], [same])
+      outstr += "</body></html>"
+
+      return outstr
+    else:
+      return ",".join(same)
+
   def getRoomsEnteredBy(self, person, html):
     rms = []
 

@@ -82,20 +82,18 @@ def main(argv=None):
       usage(exe, "Passed in an empty batchfile...what are you doing with your life?")
       return 1
 
+    retVal = 0
     for i in commands:
-      if len(i) == 0:
+      if i == "":
         continue
 
       # create our new argv
       newArgv = i.split()
 
-      retVal = parse_cmd(exe, newArgv)
+      # keep the worst error level
+      retVal = max(parse_cmd(exe, newArgv), retVal)
 
-      # some error...
-      if retVal != 0:
-        return retVal
-
-    return 0
+    return retVal
 
 def parse_cmd(exe, argv):
   try:
@@ -117,7 +115,6 @@ def parse_cmd(exe, argv):
       usage(exe)
       return 0
     elif o == "-B": # deny batch mode
-      # invalid doesnt tell enough...we want to keep the verbosity high
       die("invalid", "Batch file passed along with other options")
     elif o == "-K":
       if not verifyStr(val, string.lowercase+string.uppercase+string.digits):

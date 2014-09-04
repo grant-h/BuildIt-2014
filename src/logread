@@ -52,7 +52,7 @@ def main(argv=None):
   exe = argv[0]
 
   try:
-    opt, tail = getopt.getopt(argv[1:], "K:HSRE:G:TABL:U:", ["help"])
+    opt, tail = getopt.getopt(argv[1:], "K:HSRE:G:TIABL:U:", ["help"])
   except getopt.error as err:
     usage(exe, err.msg)
 
@@ -167,9 +167,23 @@ def main(argv=None):
 
     print state.getRoomsEnteredBy(opt_people[0], opt_outputHtml)
   elif opt_action == LogReadAction.time_by_person:
-    pass
+    if len(opt_people) > 1:
+      usage(exe, "-T specified with more than one person")
+    elif len(opt_people) < 1:
+      usage(exe, "-T specified without anyone")
+
+    amt = state.getTotalTimeSpent(opt_people[0])
+
+    if amt:
+      print amt
   elif opt_action == LogReadAction.rooms_occupied_simul:
-    pass
+    if len(opt_people) < 1:
+      usage(exe, "-I specified without anyone")
+
+    outstr = state.getRoomProximity(opt_people, opt_outputHtml)
+
+    if outstr != "":
+      print outstr
   elif opt_action == LogReadAction.time_present:
     pass
   elif opt_action == LogReadAction.time_present_exclude:
