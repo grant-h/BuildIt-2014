@@ -105,7 +105,12 @@ def main(argv=None):
 
       # we've seen an upper. we're done
       seenLower = False
-      opt_bounds.append((lowertmp, int(val, 10)))
+      final = (lowerTmp, int(val, 10))
+
+      if final[1] < final[0]:
+        usage(exe, "Upper bound was less than the matching lower bound")
+
+      opt_bounds.append(final)
       lowerTmp = None 
     elif o == "-H":
       opt_outputHtml = True
@@ -185,9 +190,24 @@ def main(argv=None):
     if outstr != "":
       print outstr
   elif opt_action == LogReadAction.time_present:
-    pass
+    if len(opt_bounds) < 1:
+      usage(exe, "-A specified without any bounds")
+    elif len(opt_bounds) > 1:
+      usage(exe, "-A specified with too many bounds")
+
+    lst = state.getEmplInGalleryBetween(opt_bounds[0][0], opt_bounds[0][1])
+    print state.formatEmplSet(lst, opt_outputHtml)
   elif opt_action == LogReadAction.time_present_exclude:
-    pass
+    if len(opt_bounds) < 1:
+      usage(exe, "-B specified without any bounds")
+    elif len(opt_bounds) == 1:
+      usage(exe, "-B is missing the last bound")
+    elif len(opt_bounds) > 2:
+      usage(exe, "-B specified with too many bounds")
+
+    lst = state.getEmplInGalleryBetween(opt_bounds[0][0], opt_bounds[0][1])
+    lst2 = state.getEmplInGalleryBetween(opt_bounds[1][0], opt_bounds[1][1])
+    print state.formatEmplSet(lst-lst2, opt_outputHtml)
   else:
     usage(exe, "An action was never specified")
 

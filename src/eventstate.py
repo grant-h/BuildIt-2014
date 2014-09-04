@@ -203,6 +203,52 @@ class EventState(object):
     else:
       return ",".join(same)
 
+  def getEmplInGalleryBetween(self, lower, upper):
+    within = set() # list of employees ever in the gallery during the bounds
+
+    currentRoster = []
+    inBounds = False
+
+    # simulate forward from the beginning of time
+    for e in self.events:
+      # while we're not at the lower time, just maintain a list of empl
+      if e.timestamp < lower:
+        # security guard arrives to the gallery
+        if not e.person.guest and e.room.isFoyer() and e.eventType == EventType.Arrival:
+          if e.person.name not in currentRoster:
+            currentRoster.append(e.person.name)
+        # security guard departs the gallery
+        elif not e.person.guest and e.room.isFoyer() and e.eventType == EventType.Departure:
+          currentRoster.remove(e.person.name)
+      else:
+        # transition
+        if not inBounds:
+          for p in currentRoster:
+            within.add(p) # add to the set
+
+          inBounds = True
+
+        # exit check
+        if e.timestamp > upper:
+          break
+
+        if not e.person.guest:
+          within.add(e.person.name)
+
+    return within
+
+  def formatEmplSet(self, st, html):
+    st = sorted(st)
+
+    if html:
+      outstr = "<html><body>"
+      outstr += self.genHTMLTable(['Employees'], [st])
+      outstr += "</body></html>"
+
+      return outstr
+    else:
+      return ",".join(st)
+
   def getRoomsEnteredBy(self, person, html):
     rms = []
 
