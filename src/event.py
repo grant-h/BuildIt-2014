@@ -54,4 +54,3 @@ class Event(object):
       eventStr = "depart"
 
     return "[%d, %s, %s, %s]" % (self.timestamp, eventStr, self.person, self.room)
-

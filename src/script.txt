@@ -1,0 +1,9 @@
+-K askdljf -E DOGE -A -T 0 tester.log
+-K askdljf -E DOGE -A -R 100 -T 1 tester.log
+-K askdljf -E MARY -A -T 10 tester.log
+-K askdljf -G MARY -A -T 11 tester.log
+-K askdljf -G DOEEE -A -T 12 tester.log
+-K askdljf -G DOEEE -A -R 100 -T 13 tester.log
+-K askdljf -G DOEEE -L -R 100 -T 14 tester.log
+-K askdljf -G DOEEE -A -R 10 -T 15 tester.log
+-K askdljf -E MARY -L -T 100 tester.log

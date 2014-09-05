@@ -3,6 +3,7 @@
 
 from common import *
 from eventstate import EventState
+from event import Event
 
 # import win
 from Crypto.Hash import HMAC,SHA256
@@ -20,6 +21,7 @@ ENC_SALT_LEN = 16
 class LogFile(object):
   logPath = None
   token = None
+  secure = True
 
   # some event stats
   state = None # actual gallery state handler
@@ -37,6 +39,7 @@ class LogFile(object):
   def __init__(self, logPath, token): 
     self.logPath = logPath
     self.token = token
+    self.secure = False
 
   # Would prefer a KDF as per the research here
   # http://palms.ee.princeton.edu/PALMSopen/yao05design.pdf
@@ -68,7 +71,7 @@ class LogFile(object):
     # changing the KDF count is the speed-limiting factor
     return PBKDF2(self.token, salt, count=50)
 
-  def unseal(self, secure=False):
+  def unseal(self):
     fp = None
 
     try:
@@ -99,7 +102,7 @@ class LogFile(object):
     # [Raw Events] = [EventLine]\n .. [EventLine]\n
     # EventLine = [timestamp],[arrive/leave (1 byte)],[name],[isguest],[room#]
 
-    if secure:
+    if self.secure:
       HEADER_LEN = len(MAGIC) + HMAC_LEN + HMAC_SALT_LEN + ENC_SALT_LEN + IV_LEN
 
       if len(fileData) < HEADER_LEN: 
@@ -157,7 +160,7 @@ class LogFile(object):
       die("invalid", e.message)
 
   # for each event, seal it up in our target file
-  def seal(self, secure=False):
+  def seal(self):
 
     if not self.unsealed:
       return
@@ -169,35 +172,28 @@ class LogFile(object):
 
     fp = None
 
+    # TODO: lock the file for writing
     try:
       # was this the first time the file has been written to?
       if self.newLogFile: # WARNING: race condition, check again and lock XXX
-        # TODO: lock the file for writing
         fp = open(self.logPath, "wb")
 
       # we should just append a new event to the log file
       # no need to rewrite the entire thing
       else:
-        fp = open(self.logPath, "wb") # for now...
-        #fp = open(self.logPath, "ab")
+        fp = open(self.logPath, "ab")
 
-        # Goal: seek backwards enough encrypted chunks
-        # until we can completely recover the last event line.
-        # Then, write the last event line and any extraneous data
-        # and append our new event(s)
-        #fp.seek(security
     except IOError, e:
       die("invalid", "Could not modify the log file: " + e.strerror)
 
-    flatLog = "" 
     dataOut = ""
 
-    for e in self.state.events:
-      flatLog += e.serialize() + "\n"
+    if self.newLogFile:
+      # it's a new log file. write out all the events
+      dataOut = "%s\n" % "\n".join(map(Event.serialize, self.state.events))
 
-    if secure:
-      # generate our salts and keys if needed
-      if self.newLogFile:
+      if self.secure:
+        # generate our salts and keys for the new log file 
         randGen = Random.new()
         self.hmacSalt = randGen.read(HMAC_SALT_LEN)
         self.encryptSalt = randGen.read(ENC_SALT_LEN)
@@ -206,22 +202,43 @@ class LogFile(object):
         self.hmacKey = self.kdf(self.hmacSalt)
         self.encryptionKey = self.kdf(self.encryptSalt)
 
-      # Encrypt the flat log file
-      encLog = self.enc(flatLog)
+        # Encrypt the flat log file
+        dataOut = self.enc(dataOut)
 
-      # Calculate the HMAC
-      hmac = self.hmac(encLog)
+        # Calculate the HMAC
+        hmac = self.hmac(dataOut)
 
-      # Concatenate all of our files
-      dataOut = MAGIC + hmac + self.hmacSalt + \
-        self.encryptSalt + self.encryptIV + encLog
+        # Concatenate all of our data 
+        dataOut = "%s%s%s%s%s%s" % (MAGIC, hmac, self.hmacSalt, self.encryptSalt, self.encryptIV, dataOut)
     else:
-      dataOut = flatLog
+      if self.secure:
+        # HACK
+        dataOut = "%s\n" % "\n".join(map(Event.serialize, self.state.events))
+
+        # TODO: seek backwards enough encrypted chunks
+        # until we can completely recover the last event line.
+        # Then, write the last event line and any extraneous data
+        # and append our new event(s)
+
+        # Encrypt the flat log file
+        dataOut = self.enc(dataOut)
+
+        # Calculate the HMAC
+        hmac = self.hmac(dataOut)
+
+        # Concatenate all of our data 
+        dataOut = "%s%s%s%s%s%s" % (MAGIC, hmac, self.hmacSalt, self.encryptSalt, self.encryptIV, dataOut)
+      else:
+        newEvents = self.state.events[self.initialNumEvents:]
+
+        # just append the new events
+        dataOut = "%s\n" % "\n".join(map(Event.serialize, newEvents))
       
     try:
       fp.write(dataOut) # could be locked
       fp.close()
 
       self.newLogFile = False
+      self.initialNumEvents = len(self.state.events)
     except IOError:
       die("invalid", "Failed to write data back to the database")

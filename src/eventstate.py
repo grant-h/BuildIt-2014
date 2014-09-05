@@ -19,12 +19,7 @@ class EventState(object):
 
   def parseEventLines(self, lines):
     # replay the events to recover state
-    for e in lines:
-      if e == "":
-        continue
-
-      if not self.parseEventLine(e):
-        raise ValueError("Failed to parse corrupt event line: \'%s\'" % e)
+    map(self.parseEventLine, lines)
 
   def clear(self):
     # clear out the state
@@ -35,17 +30,18 @@ class EventState(object):
     self.maxTime = -1
 
   def parseEventLine(self, event):
+    if event == "":
+      return
+
     e = Event.deserialize(event)
 
     if e is None:
-      return False
+      raise ValueError("Failed to parse corrupt event line: \'%s\'" % e)
 
     if e.eventType == EventType.Arrival:
       self.arrival(e.timestamp, e.person, e.room)
     elif e.eventType == EventType.Departure:
       self.departure(e.timestamp, e.person, e.room)
-
-    return True
 
   # People handling
   def lookupPerson(self, person):
@@ -102,7 +98,7 @@ class EventState(object):
       outstr += ",".join(guestList) + "\n"
 
       for i,num in enumerate(roomList):
-        outstr += "%d: " % (num) + peopleList[i] + "\n"
+        outstr += "%d: %s\n" % (num, peopleList[i])
 
     return outstr
 
