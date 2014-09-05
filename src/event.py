@@ -34,6 +34,7 @@ class Event(object):
     if len(tokens) != 5:
       return None
 
+    # TODO: more verification
     timestamp = int(tokens[0])
     eventType = int(tokens[1])
     name = tokens[2]

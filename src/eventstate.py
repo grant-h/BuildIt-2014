@@ -4,7 +4,7 @@
 from common import *
 from person import Person
 from room import Room
-from logevent import Event,EventType
+from event import Event,EventType
 
 class EventState(object):
   events = []

@@ -68,7 +68,7 @@ class LogFile(object):
     # changing the KDF count is the speed-limiting factor
     return PBKDF2(self.token, salt, count=50)
 
-  def unseal(self, secure=True):
+  def unseal(self, secure=False):
     fp = None
 
     try:
@@ -157,7 +157,7 @@ class LogFile(object):
       die("invalid", e.message)
 
   # for each event, seal it up in our target file
-  def seal(self, secure=True):
+  def seal(self, secure=False):
 
     if not self.unsealed:
       return
