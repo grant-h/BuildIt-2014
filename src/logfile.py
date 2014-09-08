@@ -21,7 +21,7 @@ ENC_SALT_LEN = 16
 class LogFile(object):
   logPath = None
   token = None
-  secure = True
+  secure = None
 
   # some event stats
   state = None # actual gallery state handler
@@ -39,7 +39,7 @@ class LogFile(object):
   def __init__(self, logPath, token): 
     self.logPath = logPath
     self.token = token
-    self.secure = False
+    self.secure = True
 
   # Would prefer a KDF as per the research here
   # http://palms.ee.princeton.edu/PALMSopen/yao05design.pdf
@@ -142,7 +142,8 @@ class LogFile(object):
       # Generate the HMAC
       tryHmac = self.hmac(encBlob)
 
-      if hmac != tryHmac:
+      if tryHmac != hmac:
+      #if HMAC.compare_digest(hmac, tryHmac):
         die("security error", "Integrity of the encrypted container failed to be verified")
 
       # Decrypt
@@ -181,7 +182,10 @@ class LogFile(object):
       # we should just append a new event to the log file
       # no need to rewrite the entire thing
       else:
-        fp = open(self.logPath, "ab")
+        if not self.secure:
+          fp = open(self.logPath, "ab")
+        else:
+          fp = open(self.logPath, "wb")
 
     except IOError, e:
       die("invalid", "Could not modify the log file: " + e.strerror)
