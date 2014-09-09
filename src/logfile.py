@@ -106,11 +106,11 @@ class LogFile(object):
       HEADER_LEN = len(MAGIC) + HMAC_LEN + HMAC_SALT_LEN + ENC_SALT_LEN + IV_LEN
 
       if len(fileData) < HEADER_LEN: 
-        return die("invalid", "Not enough space for file header")
+        die("invalid", "Not enough space for file header")
 
       # Check for the magic \o/ *^*^*^*^*!
       if fileData[0:4] != MAGIC:
-        return die("invalid", "Invalid magic bytes found")
+        die("invalid", "Invalid magic bytes found")
 
       ptr = len(MAGIC)
 
@@ -143,7 +143,7 @@ class LogFile(object):
       tryHmac = self.hmac(encBlob)
 
       if hmac != tryHmac:
-        return die("security error", "Integrity of the encrypted container failed to be verified")
+        die("security error", "Integrity of the encrypted container failed to be verified")
 
       # Decrypt
       fileData = self.dec(encBlob)
@@ -157,7 +157,7 @@ class LogFile(object):
 
       return self.state
     except ValueError, e:
-      return die("invalid", e.message)
+      die("invalid", e.message)
 
   # for each event, seal it up in our target file
   def seal(self):
@@ -187,7 +187,7 @@ class LogFile(object):
           fp = open(self.logPath, "wb")
 
     except IOError, e:
-      return die("invalid", "Could not modify the log file: " + e.strerror)
+      die("invalid", "Could not modify the log file: " + e.strerror)
 
     dataOut = ""
 
@@ -244,4 +244,4 @@ class LogFile(object):
       self.newLogFile = False
       self.initialNumEvents = len(self.state.events)
     except IOError:
-      return die("invalid", "Failed to write data back to the database")
+      die("invalid", "Failed to write data back to the database")
