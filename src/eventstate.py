@@ -268,7 +268,7 @@ class EventState(object):
   # ------ Event State Management -------
   def arrival(self, time, person, room):
     if time <= self.maxTime:
-      die("invalid", "Attempted to add event with lower than or equal time")
+      return die("invalid", "Attempted to add event with lower than or equal time")
 
     # look up the miscreant
     realPerson = self.lookupPerson(person)
@@ -282,18 +282,18 @@ class EventState(object):
       return self.appendEvent(time, EventType.Arrival, realPerson, room)
     # everything else is wrong
     else:
-      die("invalid", str(person) + " tried to break in")
+      return die("invalid", str(person) + " tried to break in")
 
   def departure(self, time, person, room):
     if time <= self.maxTime:
-      die("invalid", "Attempted to add event with lower than or equal time")
+      return die("invalid", "Attempted to add event with lower than or equal time")
 
     # whoareyou
     realPerson = self.lookupPerson(person)
 
     # they cant leave if they arent here
     if realPerson is None:
-      die("invalid", "Person tried to leave but isnt here")
+      return die("invalid", "Person tried to leave but isnt here")
     else:
       # person is in the gallery right now. they can move about
       return self.appendEvent(time, EventType.Departure, realPerson, room)
@@ -339,10 +339,12 @@ class EventState(object):
 
       event = Event(time, eventType, person, dstRoom)
     else:
-      die("invalid", str(person) + " is bending space time. Nab him! (%s -> %s)" %
+      return die("invalid", str(person) + " is bending space time. Nab him! (%s -> %s)" %
           (str(curRoom), str(dstRoom)))
 
     # update the max time
     self.maxTime = max(self.maxTime, event.timestamp)
     # add the event
     self.events.append(event)
+
+    return ("", 0)

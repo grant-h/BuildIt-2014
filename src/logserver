@@ -1,0 +1,98 @@
+#!/usr/bin/env python
+# Build it, Break it, Fix it 2014 Submission
+#  Written by team KnightSec
+
+import socket
+import sys
+import os
+import logappend
+
+def daemonize():
+  try:
+    if os.fork() > 0:
+      sys.exit(0)
+  except OSError, e:
+    sys.stderr.write("Fork #1 failed: %s\n" % e.strerror)
+    sys.exit(1)
+
+  try:
+    if os.fork() > 0:
+      sys.exit(0)
+  except OSError, e:
+    sys.stderr.write("Fork #2 failed: %s\n" % e.strerror)
+    sys.exit(1)
+
+  # redirect standard file descriptors
+  sys.stdout.flush()
+  sys.stderr.flush()
+  devnull = "/dev/null"
+  si = file(devnull, 'r')
+  so = file(devnull, 'a+')
+  se = file(devnull, 'a+', 0)
+  os.dup2(si.fileno(), sys.stdin.fileno())
+  os.dup2(so.fileno(), sys.stdout.fileno())
+  os.dup2(se.fileno(), sys.stderr.fileno())
+
+def main(argv=None):
+  server_address = '/tmp/.logserver-socket.unix'
+
+  # Make sure the socket does not already exist
+  try:
+    os.unlink(server_address)
+  except OSError:
+    if os.path.exists(server_address):
+      raise
+
+  # go to the background
+  daemonize()
+
+  # Create a UDS socket
+  sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+
+  # Bind the socket to the port
+  print >>sys.stderr, 'starting up on %s' % server_address
+  sock.bind(server_address)
+
+  # Listen for incoming connections
+  sock.listen(10)
+
+  while True:
+    # Wait for a connection
+    #print >>sys.stderr, 'waiting for a connection'
+    try:
+      sock.settimeout(5.0)
+      connection, client_address = sock.accept()
+      try:
+        #print >>sys.stderr, 'connection from', client_address
+
+        data = connection.recv(200)
+        commands = data.split()
+        output = ""
+        retval = 0
+
+        if len(commands) == 0:
+          print("Blank read")
+          continue
+
+        #print "Got command: ", commands
+
+        if commands[0].find("logappend") != -1:
+          (output, retval) = logappend.main(commands)
+        elif commands[0].find("logread") != -1:
+          (output, retval) = logread.main(commands)
+        else:
+          print("Invalid executable %s" % commands[0])
+          retval = -1
+
+        #print "Output " + output
+        connection.sendall("%d\n%s" % (retval, output))
+      finally:
+        # Clean up the connection
+          connection.close()
+    except socket.timeout, to:
+      print("Sockopt timed out: " + to.message)
+      os.unlink(server_address)
+      sys.exit(0)
+
+if __name__ == "__main__":
+  sys.exit(main(sys.argv))
