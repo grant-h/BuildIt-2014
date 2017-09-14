@@ -12,13 +12,14 @@ could seriously compromise the reliability of a program if care was not taken.
 
 Although this program uses off-the-shelf cryptographic implementations, it should be considered as "rolling your own crypto" as the guarantees of the file container have not been formally verified in any way. There may be mistakes or ommissions that could lead to the compromise of the container.
 
+For more information on the 2014 contest, [read this recap by Michael Hicks](http://www.pl-enthusiast.net/2014/10/08/bibifi-contest/).
+
 ## Architecture
-* Language: Python
-* Security model:
-**  Fully encrypted event transactions with an HMAC for authentication and integrity checking
+* **Language:** Python
+* **Security model:** Fully encrypted event transactions with an HMAC for authentication and integrity checking
 
 ## Log Append
-Dedicated log writing server. Accepts UNIX domain socket connections and handles the append requests in serial.
+Dedicated log writing application. Unseals the log file, writes an event record, reseals.
 
 ## Log Read
-Dedicated reader
+Dedicated reader application. Unseals the log file, performs some query on the event records, reseals.
